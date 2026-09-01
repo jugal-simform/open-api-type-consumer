@@ -1,0 +1,23 @@
+[
+  {
+    "id": "1",
+    "title": "Updated Title Nest",
+    "content": "Generate TypeScript types directly from your OpenAPI schema on every build so backend contract changes become compile errors, not runtime surprises.",
+    "author": "Jugal Kundaliya",
+    "createdAt": "2026-08-20T09:00:00.000Z"
+  },
+  {
+    "id": "2",
+    "title": "Why File Storage Is Fine for a Demo API",
+    "content": "Not every API needs Postgres on day one. A JSON file behind a small storage module gets you a real HTTP contract to build against.",
+    "author": "Jugal Kundaliya",
+    "createdAt": "2026-08-25T09:00:00.000Z"
+  },
+  {
+    "id": "3",
+    "title": "Fastify vs NestJS for a Small API",
+    "content": "Fastify gives you inline JSON schema next to the route. NestJS gives you DTOs and decorators. Both compile down to the same OpenAPI contract.",
+    "author": "Jugal Kundaliya",
+    "createdAt": "2026-08-30T09:00:00.000Z"
+  }
+]
