@@ -10,9 +10,9 @@ By generating your TypeScript types directly from your backend's OpenAPI (Swagge
 
 Three packages do the heavy lifting to bridge the gap between your schema and your UI:
 
-- **openapi-typescript**: Reads an OpenAPI/Swagger schema (JSON or a live URL) and generates a single TypeScript file full of types: every path, method, request body, and response shape.
-- **openapi-fetch**: A tiny (~6KB) fetch wrapper that consumes those generated types. You get full autocomplete on paths and params with no heavy codegen for client methods.
-- **openapi-react-query**: Wraps openapi-fetch in React Query, providing `useQuery` and `useMutation` hooks that are fully typed against your schema with no manual query-key management.
+- **[openapi-typescript](https://www.npmjs.com/package/openapi-typescript)**: Reads an OpenAPI/Swagger schema (JSON or a live URL) and generates a single TypeScript file full of types: every path, method, request body, and response shape.
+- **[openapi-fetch](https://www.npmjs.com/package/openapi-fetch)**: A tiny (~6KB) fetch wrapper that consumes those generated types. You get full autocomplete on paths and params with no heavy codegen for client methods.
+- **[openapi-react-query](https://www.npmjs.com/package/openapi-react-query)**: Wraps openapi-fetch in React Query, providing `useQuery` and `useMutation` hooks that are fully typed against your schema with no manual query-key management.
 
 ## Step 1: The Backend Source of Truth
 
@@ -58,24 +58,47 @@ export class UsersController {
 }
 ```
 
-## Step 2: Automatic Type Generation
+## Step 2: Automatic Type Generation (Script - FE)
 
 Instead of downloading files manually, use a script to hit the backend's schema URL. This ensures your frontend types always reflect the current state of the backend.
 
-```javascript
-// scripts/update-openapi.mjs
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+`scripts/gen-types.sh`
 
-const execFileAsync = promisify(execFile);
-const baseUrl = process.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8080';
-const schemaUrl = new URL('swagger.json', baseUrl).toString();
-const typesOut = 'src/lib/api/types.ts';
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-await execFileAsync('openapi-typescript', [schemaUrl, '-o', typesOut]);
+# URL source, in priority order:
+#   1. First CLI arg:        npm run gen:types -- http://api.example.com/openapi.json
+#   2. SWAGGER_URL env var:  SWAGGER_URL=http://api.example.com/openapi.json npm run gen:types
+#   3. Default below.
+DEFAULT_URL="http://localhost:8080/swagger.json"
+URL="${1:-${SWAGGER_URL:-$DEFAULT_URL}}"
+OUT="src/types/api.d.ts"
+
+mkdir -p "$(dirname "$OUT")"
+
+echo "Generating types from: $URL"
+npx openapi-typescript "$URL" -o "$OUT"
 ```
 
-Running this generates `src/lib/api/types.ts`. This file is a build artifact; you should never edit it by hand.
+Wire it into `package.json` so it's a normal part of the frontend workflow, not a command someone has to remember to run:
+
+`package.json`
+
+```json
+{
+  "scripts": {
+    "gen:types": "bash scripts/gen-types.sh",
+    "prebuild": "npm run gen:types",
+    "build": "tsc -b && vite build"
+  }
+}
+```
+
+The `prebuild` hook is what matters for production: npm runs it automatically before `build`, so every production build regenerates types from the live backend schema first. If the backend is unreachable or the schema drifted, the build fails at type generation or the subsequent type check instead of shipping stale types.
+
+Running `npm run gen:types` generates `src/types/api.d.ts`. This file is a build artifact; you should never edit it by hand.
 
 ## Step 3: Wiring the Typed Client
 
@@ -100,13 +123,13 @@ By passing `<paths>` to the client, every method and hook is now strictly typed 
 
 This is where the investment pays off. You no longer need to declare `interface User` or `interface APIResponse`.
 
+On openapi-typescript v7+, `paths[path][method]` and its `parameters` object are always present — only the individual `query`/`path`/`header` keys are optional (`?: never` when unused). So a single `NonNullable` around `query` is all you need; wrapping the whole `parameters` object too is a no-op left over from v6-era generated types.
+
 ```typescript
 import { api } from '@/lib/api/client';
 import type { paths } from '@/lib/api/types';
 
-type BlogListingQuery = NonNullable<
-  NonNullable<paths['/admin/blogs']['get']>['parameters']
->['query'];
+type BlogListingQuery = NonNullable<paths['/admin/blogs']['get']['parameters']['query']>;
 
 export function useBlogListing(queryOverrides?: Partial<BlogListingQuery>) {
   const query = {
@@ -138,5 +161,7 @@ The end-to-end flow creates a bulletproof contract:
 By making the type-generation script part of your CI/CD — failing the build if `types.ts` is out of sync with the schema — you eliminate an entire category of production bugs. You move from "hoping the API didn't change" to "knowing exactly what to fix" before the code is even merged.
 
 ---
+
+Full working example (Fastify + NestJS backends, file-storage, wired React frontend): [github.com/jugal-simform/cuisine-core](https://github.com/jugal-simform/cuisine-core)
 
 *Author: Jugal Kundaliya*
